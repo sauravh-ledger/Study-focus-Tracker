@@ -2,7 +2,7 @@
 
 A webcam-based study companion that measures **real focus time**. It runs entirely in the browser using on-device AI — no video is saved or uploaded.
 
-**Live app:** https://sauravh-ledger.github.io/study-focus-tracker/
+**Live app:** https://sauravh-ledger.github.io/Study-focus-Tracker/
 
 ## Features
 

@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Study Focus Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: desk-lamp metaphor — camera "lamp" panel left, timer and controls right, report and history below. */
+:root{
+  --bg:#f3f4f1; --surface:#ffffff; --ink:#1d2420; --muted:#5f6b64; --line:#dde2dc;
+  --focus:#2f7d5b; --phone:#c9711d; --away:#7a8a99; --break:#3d6fb0; --alert:#d62828; --happy:#e0a100; --calm:#6a5acd;
+  --display:"Fraunces",Georgia,serif; --body:"Figtree",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141816; --surface:#1d2320; --ink:#e7ece8; --muted:#9aa69f; --line:#2e3631;
+  --focus:#5cbf92; --phone:#f0a050; --away:#9fb0c0; --break:#7aa6e6; --alert:#ff4d4d; --happy:#ffc94d; --calm:#a99cf0; color-scheme:dark;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
+  padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:1080px;margin:0 auto;display:grid;gap:20px}
+header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px}
+h1{font:700 clamp(26px,4vw,36px)/1.1 var(--display);margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+.privacy{font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+.main{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}
+@media (max-width:820px){.main{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
+.cam{position:relative;aspect-ratio:4/3;max-width:100%;border-radius:10px;overflow:hidden;background:#0d100f}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.cam .placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#c9d1cc;text-align:center;padding:20px;font-size:14px}
+.mood{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:4px 12px;font-weight:600;font-size:14px}
+.lampbar{height:8px;border-radius:999px;margin-top:12px;background:var(--line);transition:background .4s,box-shadow .4s}
+body[data-state=studying] .lampbar{background:var(--focus);box-shadow:0 0 18px var(--focus)}
+body[data-state=phone] .lampbar{background:var(--phone);box-shadow:0 0 18px var(--phone)}
+body[data-state=away] .lampbar{background:var(--away)}
+body[data-state=break] .lampbar{background:var(--break);box-shadow:0 0 18px var(--break)}
+body[data-state=pause] .lampbar{background:var(--calm)}
+.status{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:600;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--muted)}
+body[data-state=studying] .dot{background:var(--focus)}
+body[data-state=phone] .dot{background:var(--phone)}
+body[data-state=away] .dot{background:var(--away)}
+body[data-state=break] .dot{background:var(--break)}
+body[data-state=pause] .dot{background:var(--calm)}
+.status small{font-weight:400;color:var(--muted)}
+.timer{font:600 clamp(48px,9vw,72px)/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.stat .v{font:600 20px var(--mono);font-variant-numeric:tabular-nums}
+.stat.f .v{color:var(--focus)} .stat.p .v{color:var(--phone)} .stat.a .v{color:var(--away)}
+.pomo{height:6px;background:var(--line);border-radius:999px;overflow:hidden;margin:6px 0 16px}
+.pomo i{display:block;height:100%;width:0;background:var(--focus);transition:width .5s}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+button{font:600 15px var(--body);border-radius:10px;padding:11px 18px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--focus);border-color:var(--focus);color:#fff}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--break);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.banner{border-radius:10px;padding:12px 14px;margin-bottom:14px;font-weight:600;background:color-mix(in srgb,var(--break) 18%,var(--surface))}
+details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:600}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px}
+.settings label,.full label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+.settings input,.settings select,textarea{font:500 14px var(--mono);padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%}
+.full{margin-top:12px}
+textarea{min-height:80px;resize:vertical;font-family:var(--body)}
+.demo{margin-top:14px;font-size:13px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.demo button{padding:6px 10px;font-size:13px}
+h2{font:600 22px var(--display);margin:0 0 12px}
+.report{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.score{font:700 44px var(--display);color:var(--focus)}
+.chart{display:flex;align-items:flex-end;gap:10px;height:160px;padding-top:10px;border-bottom:1px solid var(--line)}
+.bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%;min-width:0}
+.bar i{display:block;width:100%;max-width:44px;background:var(--focus);border-radius:6px 6px 0 0;min-height:2px}
+.bar span{font:500 11px var(--mono);color:var(--muted)}
+.days{display:flex;gap:10px}.days span{flex:1;text-align:center;font-size:12px;color:var(--muted)}
+.streak{margin-top:12px;color:var(--muted)} .streak b{color:var(--ink)}
+
+/* ---------- full-screen overlays ---------- */
+.overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
+.overlay[hidden]{display:none!important}
+#redAlert{background:rgba(190,10,10,.92);color:#fff;text-align:center;animation:pulse 1s infinite alternate}
+#redAlert h2{font:700 clamp(40px,9vw,96px)/1 var(--display);margin:0 0 16px;color:#fff;text-wrap:balance}
+#redAlert p{font-size:clamp(18px,2.6vw,26px);margin:0 0 28px}
+#redAlert button{background:#fff;color:#b00000;border:none;font-size:18px;padding:14px 26px}
+@keyframes pulse{from{background:rgba(190,10,10,.92)}to{background:rgba(240,30,30,.97)}}
+.card{background:var(--surface);color:var(--ink);border-radius:18px;padding:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center}
+.dim{background:rgba(10,12,20,.75)}
+.breath{width:180px;height:180px;margin:20px auto;border-radius:50%;background:radial-gradient(circle,var(--calm),transparent 70%);animation:breathe 8s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(.6)}50%{transform:scale(1.05)}}
+.breathText{font:600 20px var(--display);color:var(--calm)}
+.count{font:600 28px var(--mono);margin:8px 0 16px}
+.card h3{font:700 28px var(--display);margin:0 0 8px}
+.card .big{font-size:56px;line-height:1}
+.qopts{display:grid;gap:10px;margin:18px 0;text-align:left}
+.qopts button{text-align:left;font-weight:500}
+.qopts button.right{background:color-mix(in srgb,var(--focus) 25%,var(--surface));border-color:var(--focus)}
+.qopts button.wrong{background:color-mix(in srgb,var(--alert) 22%,var(--surface));border-color:var(--alert)}
+.qtag{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--happy);font-weight:700}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:60}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body data-state="idle">
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Study Focus Tracker</h1>
+      <p class="sub">Your webcam checks if you're studying, on your phone, or away. It warns you out loud, notices your mood, and quizzes you to keep your brain active.</p>
+    </div>
+    <span class="privacy">🔒 Runs on your device. No video is saved or uploaded.</span>
+  </header>
+
+  <div class="main">
+    <section class="panel">
+      <div class="cam">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <span class="mood" id="moodChip" hidden>😐 Neutral</span>
+        <div class="placeholder" id="placeholder">Press <b>&nbsp;Start Study Session&nbsp;</b> and allow camera access.<br>Sit so your face and desk are visible.</div>
+      </div>
+      <div class="lampbar"></div>
+      <div class="status"><span class="dot"></span><span id="statusText">Not started</span> <small id="modelText"></small></div>
+      <div class="demo">Demo mode:
+        <button data-sim="studying">Studying</button><button data-sim="phone">Phone</button><button data-sim="away">Away</button><button data-sim="">Use camera</button>
+      </div>
+      <div class="demo">Try features:
+        <button id="tSad">😔 Sad</button><button id="tHappy">😄 Happy</button><button id="tQuiz">❓ Quiz</button><button id="tAlert">🚨 Alert</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div id="banner" class="banner" hidden></div>
+      <div class="label">Real focus time</div>
+      <div class="timer" id="timer">00:00:00</div>
+      <div class="stats">
+        <div class="stat f"><div class="label">Focused</div><div class="v" id="sFocus">0m</div></div>
+        <div class="stat p"><div class="label">On phone</div><div class="v" id="sPhone">0m</div></div>
+        <div class="stat a"><div class="label">Away</div><div class="v" id="sAway">0m</div></div>
+      </div>
+      <div class="label" id="pomoLabel">Next break in 25:00</div>
+      <div class="pomo"><i id="pomoBar"></i></div>
+      <div class="btns">
+        <button class="primary" id="startBtn">Start Study Session</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button id="endBtn" disabled>End &amp; see report</button>
+      </div>
+
+      <details open>
+        <summary>Settings</summary>
+        <div class="settings">
+          <label for="voiceLang">Voice warnings<select id="voiceLang"><option value="en">English</option><option value="hi">Hindi</option><option value="off">Off</option></select></label>
+          <label for="alertDelay">Phone alert after (sec)<input id="alertDelay" type="number" min="5" max="300" value="30"></label>
+          <label for="pomoLen">Focus before break (min)<input id="pomoLen" type="number" min="1" max="120" value="25"></label>
+          <label for="breakLen">Break length (min)<input id="breakLen" type="number" min="1" max="30" value="5"></label>
+          <label for="quizEvery">Pop quiz every (min, 0 = off)<input id="quizEvery" type="number" min="0" max="120" value="15"></label>
+          <label for="moodOn">Mood helper<select id="moodOn"><option value="on">On</option><option value="off">Off</option></select></label>
+        </div>
+        <div class="full"><label for="happyList">My happy moments (one per line, shown when you smile)<textarea id="happyList">Scored full marks in my maths test
+Family trip to the beach
+Got into my CSE college</textarea></label></div>
+        <div class="full"><label for="myQuestions">My own quiz questions (one per line: Question | option 1 | option 2 | option 3 | option 4 | correct number)<textarea id="myQuestions" placeholder="What is 7 × 8? | 54 | 56 | 58 | 64 | 2"></textarea></label></div>
+      </details>
+    </section>
+  </div>
+
+  <section class="panel" id="reportPanel" hidden>
+    <h2>Session report</h2>
+    <div class="report">
+      <div><div class="label">Focus score</div><div class="score" id="rScore">0%</div></div>
+      <div><div class="label">Focused</div><div class="stat f"><div class="v" id="rFocus"></div></div></div>
+      <div><div class="label">On phone</div><div class="stat p"><div class="v" id="rPhone"></div></div></div>
+      <div><div class="label">Away</div><div class="stat a"><div class="v" id="rAway"></div></div></div>
+      <div><div class="label">Phone warnings</div><div class="stat"><div class="v" id="rWarn"></div></div></div>
+      <div><div class="label">Quiz score</div><div class="stat"><div class="v" id="rQuiz"></div></div></div>
+      <div><div class="label">Mood</div><div class="stat"><div class="v" id="rMood"></div></div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Last 7 days</h2>
+    <div class="chart" id="chart"></div>
+    <div class="days" id="days"></div>
+    <p class="streak" id="streak"></p>
+  </section>
+</div>
+
+<!-- Big red phone alert -->
+<div class="overlay" id="redAlert" hidden role="alertdialog" aria-labelledby="raTitle">
+  <div>
+    <h2 id="raTitle">⚠️ PUT YOUR PHONE DOWN!</h2>
+    <p id="raText">You've been on your phone for 30 seconds. Your exam won't study itself.</p>
+    <button id="raBtn">I'm back to studying</button>
+  </div>
+</div>
+
+<!-- Relax (sad mood) -->
+<div class="overlay dim" id="relax" hidden role="dialog" aria-labelledby="rxTitle">
+  <div class="card">
+    <h3 id="rxTitle">Let's take a 1-minute breather</h3>
+    <p>You look a little low. That's okay. Follow the circle and breathe.</p>
+    <div class="breath"></div>
+    <div class="breathText" id="breathText">Breathe in…</div>
+    <div class="count" id="rxCount">1:00</div>
+    <button id="rxSkip">I feel better, back to study</button>
+  </div>
+</div>
+
+<!-- Happy moment -->
+<div class="overlay dim" id="happy" hidden role="dialog" aria-labelledby="hpTitle">
+  <div class="card">
+    <div class="big">😄</div>
+    <h3 id="hpTitle">You're smiling!</h3>
+    <p>A good mood helps you remember more. Here's one of your happy moments:</p>
+    <p style="font:600 20px var(--display);color:var(--happy)" id="hpMoment"></p>
+    <button class="primary" id="hpBtn">Keep going 💪</button>
+  </div>
+</div>
+
+<!-- Pop quiz -->
+<div class="overlay dim" id="quiz" hidden role="dialog" aria-labelledby="qzQ">
+  <div class="card">
+    <div class="qtag">Pop quiz</div>
+    <h3 id="qzQ" style="font-size:22px"></h3>
+    <div class="qopts" id="qzOpts"></div>
+    <p id="qzMsg" style="font-weight:600;min-height:1.5em"></p>
+    <button id="qzBtn" hidden>Back to studying</button>
+  </div>
+</div>
+
+<canvas id="confetti"></canvas>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const video = $('video'), overlay = $('overlay'), ctx = overlay.getContext('2d');
+
+// ---------- state ----------
+let objectDetector = null, faceLandmarker = null, stream = null;
+let running = false, paused = false, sim = '';
+let recent = [], moodWindow = [];
+let t = {focus:0, phone:0, away:0}, warnings = 0, quiz = {asked:0, right:0}, moods = {happy:0, sad:0};
+let phoneStreak = 0, focusSinceBreak = 0, focusSinceQuiz = 0, breakLeft = 0, nextAlertAt = 0;
+let modal = '';                         // 'relax' | 'happy' | 'quiz' while one is open
+let lastSad = -1e9, lastHappy = -1e9;   // for cooldowns (ms)
+let tickTimer = null, detectTimer = null, detectBusy = false;
+
+const num = (id, d) => { const v = parseInt($(id).value, 10); return isNaN(v) ? d : v; };
+const fmt = s => { s = Math.max(0, Math.floor(s)); const h = String(Math.floor(s/3600)).padStart(2,'0'), m = String(Math.floor(s%3600/60)).padStart(2,'0'), x = String(s%60).padStart(2,'0'); return `${h}:${m}:${x}`; };
+const mins = s => s < 3600 ? `${Math.round(s/60)}m` : `${Math.floor(s/3600)}h ${Math.round(s%3600/60)}m`;
+
+// ---------- voice ----------
+const LINES = {
+  en: {
+    warn1: "Hey, put your phone down. Let's get back to studying.",
+    warn2: "Warning! You have been on your phone for too long. Focus now!",
+    brk: "Great work! Time for a short break.",
+    sad: "You look a little low. Let's take one minute to relax.",
+    happy: "You're smiling! Great mood, great learning.",
+    quiz: "Pop quiz time!",
+    right: "Correct! Well done.", wrong: "Not quite. Keep learning!",
+    back: "Break over. Let's study."
+  },
+  hi: {
+    warn1: "अरे, फ़ोन रख दो। चलो वापस पढ़ाई करते हैं।",
+    warn2: "चेतावनी! आप बहुत देर से फ़ोन चला रहे हो। अब पढ़ाई पर ध्यान दो!",
+    brk: "बहुत बढ़िया! अब थोड़ा आराम कर लो।",
+    sad: "लगता है आप थोड़े उदास हो। चलो एक मिनट आराम करते हैं।",
+    happy: "आप मुस्कुरा रहे हो! अच्छा मूड, अच्छी पढ़ाई।",
+    quiz: "क्विज़ का समय!",
+    right: "सही जवाब! शाबाश।", wrong: "गलत जवाब। कोई बात नहीं, सीखते रहो!",
+    back: "ब्रेक खत्म। चलो पढ़ाई करते हैं।"
+  }
+};
+function say(key) {
+  const lang = $('voiceLang').value;
+  if (lang === 'off' || !('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(LINES[lang][key]);
+  u.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
+  const v = speechSynthesis.getVoices().find(v => v.lang.replace('_','-').startsWith(u.lang.slice(0,2)) && v.lang.includes('IN'))
+         || speechSynthesis.getVoices().find(v => v.lang.startsWith(u.lang.slice(0,2)));
+  if (v) u.voice = v;
+  u.rate = 1; u.volume = 1;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+if ('speechSynthesis' in window) speechSynthesis.getVoices();
+
+// ---------- sound (all music is generated here, no files) ----------
+let audio = null;
+const ac = () => (audio = audio || new (window.AudioContext || window.webkitAudioContext)());
+function tone(freq, start, dur, type = 'sine', vol = 0.15, dest) {
+  const a = ac(), o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.exponentialRampToValueAtTime(vol, start + Math.min(0.05, dur / 3));
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+  o.connect(g).connect(dest || a.destination); o.start(start); o.stop(start + dur + 0.05);
+}
+function beep(freq = 660, dur = .25) { try { tone(freq, ac().currentTime, dur); } catch (e) {} }
+function alarm() { try { const n = ac().currentTime; for (let i = 0; i < 4; i++) { tone(880, n + i * .3, .15, 'square', .12); tone(660, n + i * .3 + .15, .15, 'square', .12); } } catch (e) {} }
+
+const hz = n => 440 * Math.pow(2, (n - 69) / 12);   // MIDI note → frequency
+let relaxBus = null;
+function playRelax(seconds = 60) {          // soft chords + gentle melody
+  try {
+    const a = ac(); relaxBus = a.createGain(); relaxBus.gain.value = 1;
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    relaxBus.connect(lp).connect(a.destination);
+    const chords = [[48,55,64,71],[45,52,60,67],[41,48,57,64],[43,50,59,66]];   // Cmaj7 Am7 Fmaj7 G
+    const len = 7.5, t0 = a.currentTime + .1;
+    for (let i = 0; i * len < seconds; i++) {
+      const c = chords[i % 4], st = t0 + i * len;
+      c.forEach(n => tone(hz(n), st, len + 1, 'sine', 0.045, relaxBus));
+      for (let k = 0; k < 8; k++) {
+        const note = c[(k * 3) % 4] + 12;
+        if (st + k * .9 < t0 + seconds) tone(hz(note), st + k * .9 + .2, 1.6, 'triangle', 0.035, relaxBus);
+      }
+    }
+  } catch (e) {}
+}
+function stopRelax() { if (relaxBus) { try { relaxBus.gain.setTargetAtTime(0, ac().currentTime, .3); } catch (e) {} relaxBus = null; } }
+function playHappy() {
+  try {
+    const n = ac().currentTime + .05, mel = [72,76,79,84,79,84,88,84];
+    mel.forEach((m, i) => tone(hz(m), n + i * .16, .22, 'triangle', .14));
+    [60,64,67].forEach(m => tone(hz(m), n, 1.4, 'sine', .06));
+  } catch (e) {}
+}
+
+// ---------- confetti ----------
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = $('confetti'), g = c.getContext('2d'); c.width = innerWidth; c.height = innerHeight;
+  const colors = ['#ffc94d','#5cbf92','#7aa6e6','#ff6b6b','#a99cf0'];
+  const ps = Array.from({length: 160}, () => ({x: Math.random() * c.width, y: -20 - Math.random() * c.height * .5, vx: (Math.random() - .5) * 3, vy: 2 + Math.random() * 4, r: 4 + Math.random() * 5, col: colors[Math.floor(Math.random() * 5)], a: Math.random() * 6}));
+  const end = performance.now() + 4000;
+  (function frame(now) {
+    g.clearRect(0, 0, c.width, c.height);
+    ps.forEach(p => { p.x += p.vx; p.y += p.vy; p.a += .1; g.fillStyle = p.col; g.save(); g.translate(p.x, p.y); g.rotate(p.a); g.fillRect(-p.r/2, -p.r/2, p.r, p.r * .6); g.restore(); });
+    if (now < end) requestAnimationFrame(frame); else g.clearRect(0, 0, c.width, c.height);
+  })(performance.now());
+}
+
+// ---------- AI models (MediaPipe, runs in the browser) ----------
+async function loadModels() {
+  if (objectDetector && faceLandmarker) return;
+  $('modelText').textContent = '· loading AI models… (needs internet the first time)';
+  const mod = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+  const V = mod.FilesetResolver ? mod : mod.default;
+  const files = await V.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+  const make = async (Cls, opts) => {
+    try { return await Cls.createFromOptions(files, {...opts, baseOptions: {...opts.baseOptions, delegate: 'GPU'}}); }
+    catch (e) { return await Cls.createFromOptions(files, {...opts, baseOptions: {...opts.baseOptions, delegate: 'CPU'}}); }
+  };
+  objectDetector = await make(V.ObjectDetector, {
+    baseOptions: {modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite'},
+    runningMode: 'VIDEO', scoreThreshold: 0.3, maxResults: 6
+  });
+  faceLandmarker = await make(V.FaceLandmarker, {
+    baseOptions: {modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'},
+    runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true
+  });
+  $('modelText').textContent = '· AI ready';
+}
+
+// Turn face muscle scores into a mood
+function readMood(shapes) {
+  const s = {}; shapes.forEach(c => s[c.categoryName] = c.score);
+  const smile = ((s.mouthSmileLeft || 0) + (s.mouthSmileRight || 0)) / 2;
+  const frown = ((s.mouthFrownLeft || 0) + (s.mouthFrownRight || 0)) / 2;
+  const browUp = s.browInnerUp || 0;
+  const browDown = ((s.browDownLeft || 0) + (s.browDownRight || 0)) / 2;
+  if (smile > 0.45) return 'happy';
+  if (frown > 0.12 || (browUp > 0.35 && smile < 0.1) || (browDown > 0.4 && smile < 0.1)) return 'sad';
+  return 'neutral';
+}
+
+async function detect() {
+  if (!running || paused || detectBusy || sim || !objectDetector || video.readyState < 2) return;
+  detectBusy = true;
+  try {
+    const now = performance.now();
+    const obj = objectDetector.detectForVideo(video, now);
+    const face = faceLandmarker.detectForVideo(video, now + 1);
+    const dets = obj.detections || [];
+    const has = (name, min) => dets.some(d => d.categories[0].categoryName === name && d.categories[0].score > min);
+    const faceSeen = face.faceLandmarks && face.faceLandmarks.length > 0;
+    const person = has('person', 0.45) || faceSeen;
+    const phone = has('cell phone', 0.35);
+    recent.push(!person ? 'away' : phone ? 'phone' : 'studying'); if (recent.length > 5) recent.shift();
+
+    if (faceSeen && face.faceBlendshapes && face.faceBlendshapes[0]) {
+      const m = readMood(face.faceBlendshapes[0].categories);
+      moodWindow.push(m); if (moodWindow.length > 12) moodWindow.shift();
+      const chip = $('moodChip'); chip.hidden = false;
+      chip.textContent = m === 'happy' ? '😄 Happy' : m === 'sad' ? '😔 Low' : '😐 Neutral';
+    }
+    drawBoxes(dets);
+  } catch (e) {}
+  detectBusy = false;
+}
+
+function drawBoxes(dets) {
+  overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+  ctx.clearRect(0, 0, overlay.width, overlay.height); ctx.lineWidth = 3;
+  dets.forEach(d => {
+    const n = d.categories[0].categoryName; if (n !== 'person' && n !== 'cell phone') return;
+    const b = d.boundingBox; ctx.strokeStyle = n === 'cell phone' ? '#f0a050' : '#5cbf92';
+    ctx.strokeRect(b.originX, b.originY, b.width, b.height);
+  });
+}
+
+function smoothedState() {
+  if (sim) return sim;
+  if (!recent.length) return 'studying';
+  const c = {}; recent.forEach(s => c[s] = (c[s] || 0) + 1);
+  return Object.keys(c).sort((a, b) => c[b] - c[a])[0];
+}
+
+// ---------- main loop, every second ----------
+function tick() {
+  if (!running || paused) return;
+  if (modal) { setState('pause', modal === 'quiz' ? 'Pop quiz' : modal === 'relax' ? 'Relaxing' : 'Happy moment'); return; }
+
+  if (breakLeft > 0) {
+    breakLeft--;
+    setState('break', `Break time · ${fmt(breakLeft).slice(3)} left`);
+    if (breakLeft === 0) { beep(880, .3); say('back'); showBanner(''); }
+    render(); return;
+  }
+
+  const s = smoothedState();
+  if (s === 'studying') {
+    t.focus++; focusSinceBreak++; focusSinceQuiz++; phoneStreak = 0; nextAlertAt = 0;
+    setState('studying', 'Studying'); hideAlert();
+  } else if (s === 'phone') {
+    t.phone++; phoneStreak++;
+    setState('phone', `On phone · ${phoneStreak}s`);
+    const delay = num('alertDelay', 30);
+    if (!nextAlertAt) nextAlertAt = delay;
+    if (phoneStreak >= nextAlertAt) {
+      warnings++;
+      showAlert(phoneStreak, warnings > 1 && phoneStreak > delay);
+      nextAlertAt = phoneStreak + 30;           // repeat every 30s while still on phone
+    }
+  } else {
+    t.away++; phoneStreak = 0; nextAlertAt = 0; hideAlert();
+    setState('away', 'Away from desk');
+  }
+
+  // mood helper (only while studying)
+  if (s === 'studying' && $('moodOn').value === 'on' && moodWindow.length >= 10) {
+    const sad = moodWindow.filter(m => m === 'sad').length, hap = moodWindow.filter(m => m === 'happy').length;
+    const now = Date.now();
+    if (sad >= 8 && now - lastSad > 5 * 60e3) openRelax();
+    else if (hap >= 9 && now - lastHappy > 10 * 60e3) openHappy();
+  }
+
+  // pop quiz
+  const qe = num('quizEvery', 15);
+  if (qe > 0 && focusSinceQuiz >= qe * 60 && !modal) openQuiz();
+
+  // Pomodoro break
+  if (focusSinceBreak >= num('pomoLen', 25) * 60) {
+    focusSinceBreak = 0; breakLeft = num('breakLen', 5) * 60;
+    beep(520, .3); setTimeout(() => beep(780, .3), 300); say('brk');
+    showBanner('🌿 Great work! Take a short break. Stretch, drink water, rest your eyes.');
+  }
+  render();
+}
+
+function setState(s, text) { document.body.dataset.state = s; $('statusText').textContent = text; }
+function showBanner(text) { $('banner').textContent = text; $('banner').hidden = !text; }
+
+function render() {
+  $('timer').textContent = fmt(t.focus);
+  $('sFocus').textContent = mins(t.focus); $('sPhone').textContent = mins(t.phone); $('sAway').textContent = mins(t.away);
+  const total = num('pomoLen', 25) * 60;
+  $('pomoBar').style.width = Math.min(100, focusSinceBreak / total * 100) + '%';
+  $('pomoLabel').textContent = breakLeft > 0 ? 'On break' : `Next break in ${fmt(total - focusSinceBreak).slice(3)}`;
+}
+
+// ---------- red alert ----------
+function showAlert(secs, strong) {
+  $('raTitle').textContent = strong ? '🚨 STOP! PHONE DOWN NOW!' : '⚠️ PUT YOUR PHONE DOWN!';
+  $('raText').textContent = `You've been on your phone for ${secs} seconds. Your exam won't study itself.`;
+  $('redAlert').hidden = false; alarm();
+  setTimeout(() => say(strong ? 'warn2' : 'warn1'), 1300);
+}
+function hideAlert() { $('redAlert').hidden = true; }
+$('raBtn').onclick = () => { hideAlert(); recent = []; if (sim === 'phone') sim = 'studying'; };
+
+// ---------- relax (sad) ----------
+let relaxTimer = null;
+function openRelax() {
+  modal = 'relax'; lastSad = Date.now(); moods.sad++; moodWindow = [];
+  hideAlert(); $('relax').hidden = false; say('sad');
+  setTimeout(() => playRelax(60), 2500);
+  let left = 60, phase = 0;
+  $('rxCount').textContent = '1:00';
+  relaxTimer = setInterval(() => {
+    left--; $('rxCount').textContent = `0:${String(Math.max(0, left)).padStart(2, '0')}`;
+    if (left % 4 === 0) { phase ^= 1; $('breathText').textContent = phase ? 'Breathe out…' : 'Breathe in…'; }
+    if (left <= 0) closeRelax();
+  }, 1000);
+}
+function closeRelax() { clearInterval(relaxTimer); stopRelax(); $('relax').hidden = true; modal = ''; $('breathText').textContent = 'Breathe in…'; }
+$('rxSkip').onclick = closeRelax;
+
+// ---------- happy ----------
+function openHappy() {
+  modal = 'happy'; lastHappy = Date.now(); moods.happy++; moodWindow = [];
+  const list = $('happyList').value.split('\n').map(s => s.trim()).filter(Boolean);
+  $('hpMoment').textContent = list.length ? '“' + list[Math.floor(Math.random() * list.length)] + '”' : 'Add your happy moments in Settings!';
+  $('happy').hidden = false; confetti(); playHappy(); setTimeout(() => say('happy'), 1400);
+  setTimeout(() => { if (modal === 'happy') closeHappy(); }, 12000);
+}
+function closeHappy() { $('happy').hidden = true; modal = ''; }
+$('hpBtn').onclick = closeHappy;
+
+// ---------- quiz ----------
+const BANK = [
+  ['What is 10 written in binary?', ['1010','1001','1100','1110'], 0],
+  ['CPU stands for…', ['Central Processing Unit','Computer Power Unit','Central Program Utility','Control Processing Unit'], 0],
+  ['What is 15% of 200?', ['20','25','30','35'], 2],
+  ['Which planet is called the Red Planet?', ['Venus','Mars','Jupiter','Mercury'], 1],
+  ['HTML stands for…', ['HighText Machine Language','HyperText Markup Language','HyperTool Multi Language','Home Tool Markup Language'], 1],
+  ['Speed of light is about…', ['3 × 10⁵ m/s','3 × 10⁶ m/s','3 × 10⁸ m/s','3 × 10¹⁰ m/s'], 2],
+  ['Next number: 2, 6, 12, 20, ?', ['28','30','32','26'], 1],
+  ['Chemical symbol of sodium?', ['So','Sd','Na','S'], 2],
+  ['1 byte = how many bits?', ['4','8','16','32'], 1],
+  ['Largest organ of the human body?', ['Liver','Brain','Skin','Heart'], 2],
+  ['Who is called the "Missile Man of India"?', ['C. V. Raman','Homi Bhabha','A. P. J. Abdul Kalam','Vikram Sarabhai'], 2],
+  ['Derivative of x²?', ['x','2x','x²','2'], 1],
+  ['Which data structure works First In, First Out?', ['Stack','Queue','Tree','Graph'], 1],
+  ['log₁₀(1000) = ?', ['2','3','4','10'], 1],
+  ["Ohm's law says…", ['V = IR','P = VI','V = I/R','R = VI'], 0],
+  ['A train covers 120 km in 2 hours. Its speed?', ['40 km/h','60 km/h','80 km/h','240 km/h'], 1],
+  ['Which gas do plants absorb for photosynthesis?', ['Oxygen','Nitrogen','Carbon dioxide','Hydrogen'], 2],
+  ['RAM is which type of memory?', ['Permanent','Volatile','Read-only','Optical'], 1],
+  ['Smallest prime number?', ['0','1','2','3'], 2],
+  ['Which is NOT a programming language?', ['Python','Java','C++','Photoshop'], 3]
+];
+function questions() {
+  const mine = $('myQuestions').value.split('\n').map(l => l.split('|').map(s => s.trim())).filter(p => p.length === 6 && p[0])
+    .map(p => [p[0], p.slice(1, 5), Math.min(3, Math.max(0, (parseInt(p[5], 10) || 1) - 1))]);
+  return mine.length ? mine : BANK;
+}
+function openQuiz() {
+  modal = 'quiz'; focusSinceQuiz = 0; hideAlert();
+  const qs = questions(), [q, opts, right] = qs[Math.floor(Math.random() * qs.length)];
+  $('qzQ').textContent = q; $('qzMsg').textContent = ''; $('qzBtn').hidden = true;
+  $('qzOpts').innerHTML = '';
+  opts.forEach((o, i) => {
+    const b = document.createElement('button'); b.textContent = o;
+    b.onclick = () => {
+      quiz.asked++;
+      [...$('qzOpts').children].forEach((x, j) => { x.disabled = true; if (j === right) x.classList.add('right'); });
+      if (i === right) { quiz.right++; b.classList.add('right'); $('qzMsg').textContent = '✅ Correct! Well done.'; beep(880, .2); say('right'); }
+      else { b.classList.add('wrong'); $('qzMsg').textContent = '❌ Not quite. The right answer is highlighted.'; beep(220, .3); say('wrong'); }
+      $('qzBtn').hidden = false; $('qzBtn').focus();
+    };
+    $('qzOpts').appendChild(b);
+  });
+  $('quiz').hidden = false; beep(700, .15); say('quiz');
+}
+$('qzBtn').onclick = () => { $('quiz').hidden = true; modal = ''; };
+
+// ---------- buttons ----------
+$('startBtn').onclick = async () => {
+  beep(440, .05);
+  t = {focus:0, phone:0, away:0}; warnings = 0; quiz = {asked:0, right:0}; moods = {happy:0, sad:0};
+  phoneStreak = 0; focusSinceBreak = 0; focusSinceQuiz = 0; breakLeft = 0; nextAlertAt = 0; recent = []; moodWindow = [];
+  $('reportPanel').hidden = true; showBanner('');
+  running = true; paused = false;
+  $('startBtn').disabled = true; $('pauseBtn').disabled = false; $('endBtn').disabled = false;
+  tickTimer = setInterval(tick, 1000);
+  detectTimer = setInterval(detect, 500);
+  if (!sim) await startCamera();
+};
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 480}});
+    video.srcObject = stream; await video.play();
+    $('placeholder').hidden = true;
+  } catch (e) {
+    $('placeholder').innerHTML = 'Camera not available. Allow camera access in your browser (open this file in Chrome, not inside another app), or use Demo mode below.';
+    return;
+  }
+  try { await loadModels(); }
+  catch (e) { $('modelText').textContent = '· AI models could not load. Check your internet and reload.'; }
+}
+
+$('pauseBtn').onclick = () => {
+  paused = !paused;
+  $('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+  if (paused) { setState('idle', 'Paused'); hideAlert(); }
+};
+
+$('endBtn').onclick = () => {
+  running = false; clearInterval(tickTimer); clearInterval(detectTimer);
+  if (stream) stream.getTracks().forEach(tr => tr.stop()); stream = null;
+  video.srcObject = null; ctx.clearRect(0, 0, overlay.width, overlay.height);
+  $('placeholder').hidden = false; $('moodChip').hidden = true;
+  hideAlert(); closeRelax(); closeHappy(); $('quiz').hidden = true; modal = '';
+  $('startBtn').disabled = false; $('pauseBtn').disabled = true; $('endBtn').disabled = true; $('pauseBtn').textContent = 'Pause';
+  setState('idle', 'Session ended · camera off'); showBanner('');
+  const tracked = t.focus + t.phone + t.away;
+  $('rScore').textContent = (tracked ? Math.round(t.focus / tracked * 100) : 0) + '%';
+  $('rFocus').textContent = mins(t.focus); $('rPhone').textContent = mins(t.phone); $('rAway').textContent = mins(t.away);
+  $('rWarn').textContent = warnings;
+  $('rQuiz').textContent = quiz.asked ? `${quiz.right}/${quiz.asked}` : '—';
+  $('rMood').textContent = `😄 ${moods.happy} · 😔 ${moods.sad}`;
+  $('reportPanel').hidden = false;
+  saveHistory(t.focus); drawHistory();
+};
+
+document.querySelectorAll('[data-sim]').forEach(b => b.onclick = () => { sim = b.dataset.sim; recent = []; });
+$('tSad').onclick = () => { if (!modal) openRelax(); };
+$('tHappy').onclick = () => { if (!modal) openHappy(); };
+$('tQuiz').onclick = () => { if (!modal) openQuiz(); };
+$('tAlert').onclick = () => { warnings++; showAlert(num('alertDelay', 30), false); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { hideAlert(); } });
+
+// ---------- remember settings in this browser ----------
+const KEEP = ['voiceLang','alertDelay','pomoLen','breakLen','quizEvery','moodOn','happyList','myQuestions'];
+try { const s = JSON.parse(localStorage.getItem('focusSettings') || '{}'); KEEP.forEach(k => { if (s[k] != null) $(k).value = s[k]; }); } catch (e) {}
+KEEP.forEach(k => $(k).addEventListener('change', () => { try { const s = {}; KEEP.forEach(x => s[x] = $(x).value); localStorage.setItem('focusSettings', JSON.stringify(s)); } catch (e) {} }));
+
+// ---------- history ----------
+const dayKey = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+function loadHistory() { try { return JSON.parse(localStorage.getItem('focusHistory2') || '{}'); } catch (e) { return {}; } }
+function saveHistory(sec) { try { const h = loadHistory(), k = dayKey(new Date()); h[k] = (h[k] || 0) + sec; localStorage.setItem('focusHistory2', JSON.stringify(h)); } catch (e) {} }
+function drawHistory() {
+  const h = loadHistory(), days = [];
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
+  const vals = days.map(d => h[dayKey(d)] || 0), max = Math.max(3600, ...vals);
+  $('chart').innerHTML = vals.map(v => `<div class="bar"><span>${v ? mins(v) : ''}</span><i style="height:${v / max * 85}%"></i></div>`).join('');
+  $('days').innerHTML = days.map(d => `<span>${d.toLocaleDateString('en-IN', {weekday: 'short'})}</span>`).join('');
+  let streak = 0; for (let i = vals.length - 1; i >= 0 && vals[i] >= 600; i--) streak++;
+  $('streak').innerHTML = streak ? `🔥 <b>${streak}-day streak</b> of 10+ focused minutes. Keep it going!` : 'Study 10+ focused minutes today to start a streak.';
+}
+drawHistory(); render();
+</script>
+</body>
+</html>
